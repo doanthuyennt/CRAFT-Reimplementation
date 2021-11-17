@@ -14,7 +14,6 @@ import torch.optim as optim
 import random
 import h5py
 import re
-import water
 from test import test
 
 
@@ -22,9 +21,6 @@ from math import exp
 from data_loader import ICDAR2015, Synth80k, ICDAR2013
 
 ###import file#######
-from augmentation import random_rot, crop_img_bboxes
-from gaussianmap import gaussion_transform, four_point_transform
-from generateheatmap import add_character, generate_target, add_affinity, generate_affinity, sort_box, real_affinity, generate_affinity_box
 from mseloss import Maploss
 
 

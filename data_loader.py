@@ -626,7 +626,7 @@ import json
 
 class VietSynth(craft_base_dataset):
 
-    def __init__(self,net, synthtext_folder, target_size=768, viz=False, debug=False):
+    def __init__(self, synthtext_folder, target_size=768, viz=False, debug=False):
         
         super(VietSynth, self).__init__(target_size, viz, debug)
         self.synthtext_folder = synthtext_folder
@@ -637,7 +637,6 @@ class VietSynth(craft_base_dataset):
         for dir in listdirs: 
             self.image_list.extend([ os.path.join(dir , x)  for x in os.listdir(os.path.join(self.image_root,dir))
                                 ])
-        print(self.image_list[:50])
         self.annotation_list = ['{}'.format(img_name.replace('.jpg', '').replace('.png','')) for img_name in self.image_list]
     def __getitem__(self, index):
         return self.pull_item(index)
@@ -742,7 +741,7 @@ if __name__ == '__main__':
     net = torch.nn.DataParallel(net)
     net.eval()
     # dataloader = ICDAR2015(net, '../../data/ICDAR-data/icdar_15/', target_size=768, viz=True)
-    dataloader = VietSynth(net,'/mlcv/WorkingSpace/Projects/SceneText/thuyentd/source/SynthText/results_synth_150k_jpg/',target_size=768, viz=True, debug=True)
+    dataloader = VietSynth('../../source/SynthText/results_synth_150k_jpg/',target_size=768, viz=True, debug=True)
     train_loader = torch.utils.data.DataLoader(
         dataloader,
         batch_size=1,
