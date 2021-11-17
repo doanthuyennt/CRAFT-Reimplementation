@@ -249,8 +249,8 @@ class craft_base_dataset(data.Dataset):
             target = self.gaussianTransformer.generate_region(region_scores_color.shape, [_tmp_bboxes])
             target_color = cv2.applyColorMap(target, cv2.COLORMAP_JET)
             viz_image = np.hstack([input[:, :, ::-1], region_scores_color, target_color])
-            cv2.imshow("crop_image", viz_image)
-            cv2.waitKey()
+            # cv2.imshow("crop_image", viz_image)
+            # cv2.waitKey()
         bboxes /= scale
         try:
             for j in range(len(bboxes)):
@@ -297,10 +297,10 @@ class craft_base_dataset(data.Dataset):
         output = np.concatenate([gt_scores, confidence_mask_gray],
                                 axis=0)
         output = np.hstack([image, output])
-        outpath = os.path.join(os.path.join(os.path.dirname(__file__) + '/output'), "%s_input.jpg" % imagename)
+        outpath = os.path.join('./output', "%s_input.jpg" % imagename)
         print(outpath)
         if not os.path.exists(os.path.dirname(outpath)):
-            os.mkdir(os.path.dirname(outpath))
+            os.makedirs(os.path.dirname(outpath))
         cv2.imwrite(outpath, output)
 
     def saveImage(self, imagename, image, bboxes, affinity_bboxes, region_scores, affinity_scores, confidence_mask):
@@ -320,10 +320,10 @@ class craft_base_dataset(data.Dataset):
         heat_map = np.concatenate([target_gaussian_heatmap_color, target_gaussian_affinity_heatmap_color], axis=1)
         confidence_mask_gray = imgproc.cvt2HeatmapImg(confidence_mask)
         output = np.concatenate([output_image, heat_map, confidence_mask_gray], axis=1)
-        outpath = os.path.join(os.path.join(os.path.dirname(__file__) + '/output'), imagename)
+        outpath = os.path.join('./output', "%s.jpg" % imagename)
 
         if not os.path.exists(os.path.dirname(outpath)):
-            os.mkdir(os.path.dirname(outpath))
+            os.makedirs(os.path.dirname(outpath))
         cv2.imwrite(outpath, output)
 
     def pull_item(self, index):
@@ -622,6 +622,103 @@ class ICDAR2015(craft_base_dataset):
             words.append(word)
         return bboxes, words
 
+import json
+
+class VietSynth(craft_base_dataset):
+
+    def __init__(self,net, synthtext_folder, target_size=768, viz=False, debug=False):
+        
+        super(VietSynth, self).__init__(target_size, viz, debug)
+        self.synthtext_folder = synthtext_folder
+        self.image_root = os.path.join(synthtext_folder,'outimage_synth')
+        self.annotation_root = os.path.join(synthtext_folder,'outjson_synth')
+        self.image_list = []
+        listdirs = os.listdir(self.image_root)
+        for dir in listdirs: 
+            self.image_list.extend([ os.path.join(dir , x)  for x in os.listdir(os.path.join(self.image_root,dir))
+                                ])
+        print(self.image_list[:50])
+        self.annotation_list = ['{}'.format(img_name.replace('.jpg', '').replace('.png','')) for img_name in self.image_list]
+    def __getitem__(self, index):
+        return self.pull_item(index)
+
+    def __len__(self):
+        # return len(self.imgtxt)
+        return len(self.image_list)
+
+    def get_imagename(self, index):
+        image_id = self.image_list[index]
+        return image_id
+
+    def pil_load_img(self,path):
+        image = Image.open(path)
+        image = np.array(image)
+        return image
+
+    @staticmethod
+    def parse_json(gt_path):
+        json_data = json.load(open(gt_path + ".json"))
+
+        words = json_data['words']
+        polygons = []
+        for word in words:
+            
+            xx = word['points'][0]
+            yy = word['points'][1]
+            pts = np.stack([xx, yy]).T.astype(np.int32)
+
+            label = word['points']
+
+            d1 = norm2(pts[0] - pts[1])
+            d2 = norm2(pts[1] - pts[2])
+            d3 = norm2(pts[2] - pts[3])
+            d4 = norm2(pts[3] - pts[0])
+            if min([d1, d2, d3, d4]) < 2:
+                continue
+            polygons.append(TextInstance(pts, 'c', label))
+
+        return polygons
+
+    def load_image_gt_and_confidencemask(self, index):
+        '''
+        根据索引加载ground truth
+        :param index:索引
+        :return:bboxes 字符的框，
+        '''
+        image_id = self.image_list[index]
+        image_path = os.path.join(self.image_root, image_id)
+
+        # Read image data
+
+        image = cv2.imread(image_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = np.array(image)
+        
+        annotation_id = self.annotation_list[index]
+        gt_path = os.path.join(self.annotation_root, annotation_id)
+        json_data = json.load(open(gt_path + ".json"))
+
+        words = json_data['words'] ## List
+        character_bboxes = []
+        confidences = []
+        for word in words: 
+            chars = word['chars'] ## List
+            coors_ = []
+            for char in chars:
+                char_points = char['points']
+                char_x_coors = char_points[0]
+                char_y_coors = char_points[1]
+                coors = list(zip(
+                    char_x_coors,char_y_coors))
+                coors = np.array(coors).astype(float).reshape(4,2)
+                coors_.append(coors)
+            coors_ = np.array(coors_)
+            confidences.append(1.0)
+            character_bboxes.append(coors_)
+        words = [x['text'] for x in words]
+        character_bboxes = np.array(character_bboxes)
+        image = random_scale(image, character_bboxes, self.target_size)
+        return image, character_bboxes, words, np.ones((image.shape[0], image.shape[1]), np.float32), confidences
 
 if __name__ == '__main__':
     # synthtextloader = Synth80k('/home/jiachx/publicdatasets/SynthText/SynthText', target_size=768, viz=True, debug=True)
@@ -637,24 +734,28 @@ if __name__ == '__main__':
     from craft import CRAFT
     from torchutil import copyStateDict
 
-    net = CRAFT(freeze=True)
-    net.load_state_dict(
-        copyStateDict(torch.load('/data/CRAFT-pytorch/1-7.pth')))
+    net = CRAFT(pretrained=False,freeze=True)
+    # net.load_state_dict(
+    #     copyStateDict(torch.load('/data/CRAFT-pytorch/1-7.pth')))
+    torch.multiprocessing.set_start_method('spawn')
     net = net.cuda()
     net = torch.nn.DataParallel(net)
     net.eval()
-    dataloader = ICDAR2015(net, '/data/CRAFT-pytorch/icdar2015', target_size=768, viz=True)
+    # dataloader = ICDAR2015(net, '../../data/ICDAR-data/icdar_15/', target_size=768, viz=True)
+    dataloader = VietSynth(net,'/mlcv/WorkingSpace/Projects/SceneText/thuyentd/source/SynthText/results_synth_150k_jpg/',target_size=768, viz=True, debug=True)
     train_loader = torch.utils.data.DataLoader(
         dataloader,
         batch_size=1,
         shuffle=False,
-        num_workers=0,
+        num_workers=2,
         drop_last=True,
         pin_memory=True)
     total = 0
     total_sum = 0
     for index, (opimage, region_scores, affinity_scores, confidence_mask, confidences_mean) in enumerate(train_loader):
         total += 1
+        if index == 10:
+            break
         # confidence_mean = confidences_mean.mean()
         # total_sum += confidence_mean
         # print(index, confidence_mean)
