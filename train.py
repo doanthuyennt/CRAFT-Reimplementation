@@ -63,6 +63,14 @@ parser.add_argument('--gamma', default=0.1, type=float,
 parser.add_argument('--num_workers', default=32, type=int,
                     help='Number of workers used in dataloading')
 
+
+##### Test #####
+parser.add_argument('--text_threshold', default=0.7, type=float, help='text confidence threshold')
+parser.add_argument('--low_text', default=0.4, type=float, help='text low-bound score')
+parser.add_argument('--link_threshold', default=0.4, type=float, help='link confidence threshold')
+parser.add_argument('--canvas_size', default=2240, type=int, help='image size for inference')
+parser.add_argument('--poly', default=False, action='store_true', help='enable polygon type')
+
 ##### Data #####
 parser.add_argument('--synth_data', default="Synthtext", type=str,
                         choices=['Synthtext','VietST'], help='Synthesis data')
