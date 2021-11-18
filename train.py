@@ -153,7 +153,7 @@ if __name__ == '__main__':
         dataloader = Synth80k(args.synth_path,target_size=768, viz=False, debug=True)
     train_loader = torch.utils.data.DataLoader(
         dataloader,
-        batch_size=4,
+        batch_size=2,
         shuffle=True,
         num_workers=4,
         drop_last=True,
@@ -172,7 +172,7 @@ if __name__ == '__main__':
         realdata = ICDAR2013(net, args.real_path, target_size=768)
     real_data_loader = torch.utils.data.DataLoader(
         realdata,
-        batch_size=4,
+        batch_size=2,
         shuffle=True,
         num_workers=4,
         drop_last=True,
@@ -222,7 +222,7 @@ if __name__ == '__main__':
                     )
                 torch.save(net.module.state_dict(),
                             out_path)
-                test(out_path)
+                test(net,args)
                 #test('/data/CRAFT-pytorch/craft_mlt_25k.pth')
                 if index != 0:
                     getresult()

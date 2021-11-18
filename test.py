@@ -110,20 +110,20 @@ def test_net(net, image, text_threshold, link_threshold, low_text, cuda, poly):
 
 
 
-def test(modelpara):
+def test(net,args):
     # load net
-    net = CRAFT()     # initialize
+    # net = CRAFT()     # initialize
 
-    print('Loading weights from checkpoint {}'.format(modelpara))
-    if args.cuda:
-        net.load_state_dict(copyStateDict(torch.load(modelpara)))
-    else:
-        net.load_state_dict(copyStateDict(torch.load(modelpara, map_location='cpu')))
+    # print('Loading weights from checkpoint {}'.format(modelpara))
+    # if args.cuda:
+    #     net.load_state_dict(copyStateDict(torch.load(modelpara)))
+    # else:
+    #     net.load_state_dict(copyStateDict(torch.load(modelpara, map_location='cpu')))
 
-    if args.cuda:
-        net = net.cuda()
-        net = torch.nn.DataParallel(net)
-        cudnn.benchmark = False
+    # if args.cuda:
+    #     net = net.cuda()
+    #     net = torch.nn.DataParallel(net)
+    #     cudnn.benchmark = False
 
     net.eval()
 
