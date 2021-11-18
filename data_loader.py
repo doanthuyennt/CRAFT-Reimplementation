@@ -719,17 +719,148 @@ class VietSynth(craft_base_dataset):
         image = random_scale(image, character_bboxes, self.target_size)
         return image, character_bboxes, words, np.ones((image.shape[0], image.shape[1]), np.float32), confidences
 
+import re
+
+COORS_8            = '^'+ ','.join(['\s*(-?[0-9]+)\s*']*8)
+POINT_TRANS_CONF_8 = COORS_8 + ',\s*([0-1].?[0-9]*)\s*,(.*)$'
+POINT_TRANS_8      = COORS_8 + ',(.*)$'
+POINT_CONF_8       = COORS_8 + ',\s*([0-1].?[0-9]*)\s*$'
+POINT_ONLY_8       = COORS_8 + '$'
+
+class VietSB(craft_base_dataset):
+    def __init__(self, net, vietsb_folder, target_size=768, viz=False, debug=False):
+        super(VietSB, self).__init__(target_size, viz, debug)
+        self.net = net
+        self.net.eval()
+        self.img_folder = os.path.join(vietsb_folder, 'final_images_train')
+        self.gt_folder = os.path.join(vietsb_folder, 'coco_txt_train')
+        imagenames = os.listdir(self.img_folder)
+        self.images_path = []
+        for imagename in imagenames:
+            self.images_path.append(imagename)
+
+    def __getitem__(self, index):
+        return self.pull_item(index)
+
+    def __len__(self):
+        return len(self.images_path)
+
+    def get_imagename(self, index):
+        return self.images_path[index]
+
+    def load_image_gt_and_confidencemask(self, index):
+        '''
+        根据索引加载ground truth
+        :param index:索引
+        :return:bboxes 字符的框，
+        '''
+        imagename = self.images_path[index]
+        gt_path = os.path.join(self.gt_folder, "%s.txt" % os.path.splitext(imagename)[0])
+        word_bboxes, words = self.load_gt(gt_path)
+        word_bboxes = np.float32(word_bboxes)
+
+        image_path = os.path.join(self.img_folder, imagename)
+        image = cv2.imread(image_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        image = random_scale(image, word_bboxes, self.target_size)
+
+        confidence_mask = np.ones((image.shape[0], image.shape[1]), np.float32)
+
+        character_bboxes = []
+        new_words = []
+        confidences = []
+        if len(word_bboxes) > 0:
+            for i in range(len(word_bboxes)):
+                if words[i] == '###' or len(words[i].strip()) == 0:
+                    cv2.fillPoly(confidence_mask, [np.int32(word_bboxes[i])], (0))
+            for i in range(len(word_bboxes)):
+                if words[i] == '###' or len(words[i].strip()) == 0:
+                    continue
+                pursedo_bboxes, bbox_region_scores, confidence = self.inference_pursedo_bboxes(self.net, image,
+                                                                                               word_bboxes[i],
+                                                                                               words[i],
+                                                                                               viz=self.viz)
+                confidences.append(confidence)
+                cv2.fillPoly(confidence_mask, [np.int32(word_bboxes[i])], (confidence))
+                new_words.append(words[i])
+                character_bboxes.append(pursedo_bboxes)
+        return image, character_bboxes, new_words, confidence_mask, confidences
+
+    def load_gt(self, gt_path):
+        lines = open(gt_path, encoding='utf-8').readlines()
+        bboxes = []
+        words = []
+        for line in lines:
+            m = re.match(POINT_TRANS_8,line)
+            box = [m.group(i) for i in range(1,9)]
+            box = np.array(box, np.int32).reshape(4, 2)
+            word = m.group(9)
+            if word == '###':
+                words.append('###')
+                bboxes.append(box)
+                continue
+            area, p0, p3, p2, p1, _, _ = mep(box)
+
+            bbox = np.array([p0, p1, p2, p3])
+            distance = 10000000
+            index = 0
+            for i in range(4):
+                d = np.linalg.norm(box[0] - bbox[i])
+                if distance > d:
+                    index = i
+                    distance = d
+            new_box = []
+            for i in range(index, index + 4):
+                new_box.append(bbox[i % 4])
+            new_box = np.array(new_box)
+            bboxes.append(np.array(new_box))
+            words.append(word)
+        return bboxes, words
+
+def str2bool(v):
+    return v.lower() in ("yes", "true", "t", "1")
+
+import argparse
+parser = argparse.ArgumentParser(description='CRAFT reimplementation')
+
+##### Checkpoint #####
+parser.add_argument('--resume', default=None, type=str,
+                    help='Checkpoint state_dict file to resume training from')
+
+
+##### Config #####
+parser.add_argument('--batch_size', default=128, type = int,
+                    help='batch size of training')
+parser.add_argument('--cuda', default=True, type=str2bool,
+                    help='Use CUDA to train model')
+parser.add_argument('--lr', '--learning-rate', default=3.2768e-5, type=float,
+                    help='initial learning rate')
+parser.add_argument('--momentum', default=0.9, type=float,
+                    help='Momentum value for optim')
+parser.add_argument('--weight_decay', default=5e-4, type=float,
+                    help='Weight decay for SGD')
+parser.add_argument('--gamma', default=0.1, type=float,
+                    help='Gamma update for SGD')
+parser.add_argument('--num_workers', default=32, type=int,
+                    help='Number of workers used in dataloading')
+
+##### Data #####
+parser.add_argument('--synth_data', default="Synthtext", type=str,
+                        choices=['Synthtext','VietST'], help='Synthesis data')
+parser.add_argument('--synth_path',type=str,  help='Synthesis data path')
+parser.add_argument('--real_data', default="ICDAR2015", type=str,
+                        choices=['ICDAR2013','ICDAR2015','VietSB'], help='Real data')
+parser.add_argument('--real_path',type=str,  help='Real data path')
+
+##### Output ####
+parser.add_argument('--out_folder',default='./checkpoints/',type=str,
+                    help='Ouput folder checkpoints')
+
+args = parser.parse_args()
+
 if __name__ == '__main__':
-    # synthtextloader = Synth80k('/home/jiachx/publicdatasets/SynthText/SynthText', target_size=768, viz=True, debug=True)
-    # train_loader = torch.utils.data.DataLoader(
-    #     synthtextloader,
-    #     batch_size=1,
-    #     shuffle=False,
-    #     num_workers=0,
-    #     drop_last=True,
-    #     pin_memory=True)
-    # train_batch = iter(train_loader)
-    # image_origin, target_gaussian_heatmap, target_gaussian_affinity_heatmap, mask = next(train_batch)
+
     from craft import CRAFT
     from torchutil import copyStateDict
 
@@ -740,8 +871,8 @@ if __name__ == '__main__':
     net = net.cuda()
     net = torch.nn.DataParallel(net)
     net.eval()
-    # dataloader = ICDAR2015(net, '../../data/ICDAR-data/icdar_15/', target_size=768, viz=True)
-    dataloader = VietSynth('../../source/SynthText/results_synth_150k_jpg/',target_size=768, viz=True, debug=True)
+
+    dataloader = VietSB(net,args.real_path,target_size=768, viz=True, debug=True)
     train_loader = torch.utils.data.DataLoader(
         dataloader,
         batch_size=1,
