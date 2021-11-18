@@ -48,12 +48,16 @@ random.seed(42)
 parser = argparse.ArgumentParser(description='CRAFT reimplementation')
 
 
+##### Checkpoint #####
 parser.add_argument('--resume', default=None, type=str,
                     help='Checkpoint state_dict file to resume training from')
+
+
+##### Config #####
 parser.add_argument('--batch_size', default=128, type = int,
                     help='batch size of training')
-#parser.add_argument('--cdua', default=True, type=str2bool,
-                    #help='Use CUDA to train model')
+parser.add_argument('--cuda', default=True, type=str2bool,
+                    help='Use CUDA to train model')
 parser.add_argument('--lr', '--learning-rate', default=3.2768e-5, type=float,
                     help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float,
@@ -64,6 +68,29 @@ parser.add_argument('--gamma', default=0.1, type=float,
                     help='Gamma update for SGD')
 parser.add_argument('--num_workers', default=32, type=int,
                     help='Number of workers used in dataloading')
+
+
+##### Test #####
+parser.add_argument('--text_threshold', default=0.7, type=float, help='text confidence threshold')
+parser.add_argument('--low_text', default=0.4, type=float, help='text low-bound score')
+parser.add_argument('--link_threshold', default=0.4, type=float, help='link confidence threshold')
+parser.add_argument('--canvas_size', default=1280, type=int, help='image size for inference')
+parser.add_argument('--poly', default=False, action='store_true', help='enable polygon type')
+parser.add_argument('--mag_ratio', default=2., type=float, help='image magnification ratio')
+parser.add_argument('--show_time', default=False, action='store_true', help='show processing time')
+
+##### Data #####
+parser.add_argument('--synth_data', default="Synthtext", type=str,
+                        choices=['Synthtext','VietST'], help='Synthesis data')
+parser.add_argument('--synth_path',type=str,  help='Synthesis data path')
+parser.add_argument('--real_data', default="ICDAR2015", type=str,
+                        choices=['ICDAR2013','ICDAR2015','VietSB'], help='Real data')
+parser.add_argument('--real_path',type=str,  help='Real data path')
+
+##### Output ####
+parser.add_argument('--out_folder',default='./checkpoints/',type=str,
+                    help='Ouput folder checkpoints')
+args = parser.parse_args()
 
 
 args = parser.parse_args()
@@ -91,6 +118,40 @@ def adjust_learning_rate(optimizer, gamma, step):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
+def step(
+    net,
+    images, gh_label, gah_label, mask,
+    index,
+    len_data_loader,
+    out_folder,
+    st,
+    loss_value
+):
+    images = Variable(images.type(torch.FloatTensor)).cuda()
+    gh_label = gh_label.type(torch.FloatTensor)
+    gah_label = gah_label.type(torch.FloatTensor)
+    gh_label = Variable(gh_label).cuda()
+    gah_label = Variable(gah_label).cuda()
+    mask = mask.type(torch.FloatTensor)
+    mask = Variable(mask).cuda()
+
+    out, _ = net(images)
+
+    optimizer.zero_grad()
+
+    out1 = out[:, :, :, 0].cuda()
+    out2 = out[:, :, :, 1].cuda()
+    loss = criterion(gh_label, gah_label, out1, out2, mask)
+
+    loss.backward()
+    optimizer.step()
+    loss_value[0] += loss.item()
+    if index % 2 == 0 and index > 0:
+        et = time.time()
+        print('epoch {}:({}/{}) batch || training time for 2 batch {} || training loss {} ||'.format(epoch, index, len_data_loader, et-st[0], loss_value[0]/2))
+        loss_time = 0
+        loss_value[0] = 0
+        st[0] = time.time()
 
 if __name__ == '__main__':
 
@@ -116,26 +177,12 @@ if __name__ == '__main__':
         pin_memory=True)
 
     net = CRAFT()
-    if args.real_data == 'VietSB':
-        realdata = VietSB(net, args.real_path, target_size=768)
-    elif args.real_data == 'ICDAR2015':
-        realdata = ICDAR2015(net, args.real_path, target_size=768)
-    elif args.real_data == 'ICDAR2013':
-        realdata = ICDAR2013(net, args.real_path, target_size=768)
     net = net.cuda()
     #net = CRAFT_net
 
     # if args.cdua:
     net = torch.nn.DataParallel(net).cuda()
     cudnn.benchmark = True
-    real_data_loader = torch.utils.data.DataLoader(
-        realdata,
-        batch_size=10,
-        shuffle=True,
-        num_workers=0,
-        drop_last=True,
-        pin_memory=True)
-
 
     optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     criterion = Maploss()
@@ -144,7 +191,7 @@ if __name__ == '__main__':
 
 
     step_index = 0
-    os.makedirs('./data/CRAFT-pytorch/synweights/',exist_ok = True)
+    os.makedirs(args.out_folder,exist_ok = True)
 
     loss_time = 0
     loss_value = 0
@@ -155,64 +202,39 @@ if __name__ == '__main__':
         #     step_index += 1
         #     adjust_learning_rate(optimizer, args.gamma, step_index)
 
-        st = time.time()
+        st = [time.time()]
         for index, (images, gh_label, gah_label, mask, _) in enumerate(train_loader):
             if index % 1000 == 0 and index != 0:
                 step_index += 1
                 adjust_learning_rate(optimizer, args.gamma, step_index)
-            #real_images, real_gh_label, real_gah_label, real_mask = next(batch_real)
-
-            # syn_images, syn_gh_label, syn_gah_label, syn_mask = next(batch_syn)
-            # images = torch.cat((syn_images,real_images), 0)
-            # gh_label = torch.cat((syn_gh_label, real_gh_label), 0)
-            # gah_label = torch.cat((syn_gah_label, real_gah_label), 0)
-            # mask = torch.cat((syn_mask, real_mask), 0)
-
-            #affinity_mask = torch.cat((syn_mask, real_affinity_mask), 0)
-
-
-            images = Variable(images.type(torch.FloatTensor)).cuda()
-            gh_label = gh_label.type(torch.FloatTensor)
-            gah_label = gah_label.type(torch.FloatTensor)
-            gh_label = Variable(gh_label).cuda()
-            gah_label = Variable(gah_label).cuda()
-            mask = mask.type(torch.FloatTensor)
-            mask = Variable(mask).cuda()
-            # affinity_mask = affinity_mask.type(torch.FloatTensor)
-            # affinity_mask = Variable(affinity_mask).cuda()
-
-            out, _ = net(images)
-
-            optimizer.zero_grad()
-
-            out1 = out[:, :, :, 0].cuda()
-            out2 = out[:, :, :, 1].cuda()
-            loss = criterion(gh_label, gah_label, out1, out2, mask)
-
-            loss.backward()
-            optimizer.step()
-            loss_value += loss.item()
-            if index % 2 == 0 and index > 0:
-                et = time.time()
-                print('epoch {}:({}/{}) batch || training time for 2 batch {} || training loss {} ||'.format(epoch, index, len(train_loader), et-st, loss_value/2))
-                loss_time = 0
-                loss_value = 0
-                st = time.time()
-            # if loss < compare_loss:
-            #     print('save the lower loss iter, loss:',loss)
-            #     compare_loss = loss
-            #     torch.save(net.module.state_dict(),
-            #                '/data/CRAFT-pytorch/real_weights/lower_loss.pth'
-
-            if index % 1000 == 0 and index != 0:
+            step(
+                net,
+                images, gh_label, gah_label, mask,
+                index,
+                len(real_data_loader),
+                args.out_folder,
+                st,
+                loss_value
+            )
+            if index % 1000 == 0:
+                net.eval()
                 print('Saving state, index:', index)
+                out_path = os.path.join(args.out_folder,
+                    'synweights_epoch_{}_iter_{}_.pth'.format(epoch,repr(index))
+                    )
                 torch.save(net.module.state_dict(),
-                           './data/CRAFT-pytorch/synweights/synweights_epoch_{}_iter_{}_.pth'.format(epoch,repr(index)))
-                test('./data/CRAFT-pytorch/synweights/synweights_epoch_{}_iter_{}_.pth'.format(epoch,repr(index)))
+                            out_path)
+                test(net,args)
                 #test('/data/CRAFT-pytorch/craft_mlt_25k.pth')
-                getresult()
+                if index != 0:
+                    getresult()
+                net.train()
+        final_iter_path = os.path.join(
+            out_folder,
+            'synweights_epoch_{}_iter_final_.pth'.format(epoch)
+        )
         torch.save(net.module.state_dict(),
-            './data/CRAFT-pytorch/synweights/synweights_epoch_{}_iter_final_.pth'.format(epoch))
+            final_iter_path)
 
 
 
