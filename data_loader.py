@@ -260,7 +260,8 @@ class craft_base_dataset(data.Dataset):
                 ori = np.matmul(I, tmp.transpose(1, 0)).transpose(1, 0)
                 bboxes[j] = ori[:, :2]
         except Exception as e:
-            print(e, gt_path)
+            print(e)
+            return None, None, None
 
 #         for j in range(len(bboxes)):
 #             ones = np.ones((4, 1))
@@ -485,6 +486,8 @@ class ICDAR2013(craft_base_dataset):
                                                                                                words[i],
                                                                                                gt_path,
                                                                                                viz=self.viz)
+                if pursedo_bboxes is None:
+                    continue
                 confidences.append(confidence)
                 cv2.fillPoly(confidence_mask, [np.int32(word_bboxes[i])], (confidence))
                 new_words.append(words[i])
@@ -584,6 +587,8 @@ class ICDAR2015(craft_base_dataset):
                                                                                                word_bboxes[i],
                                                                                                words[i],
                                                                                                viz=self.viz)
+                if pursedo_bboxes is None:
+                    continue
                 confidences.append(confidence)
                 cv2.fillPoly(confidence_mask, [np.int32(word_bboxes[i])], (confidence))
                 new_words.append(words[i])
@@ -781,6 +786,8 @@ class VietSB(craft_base_dataset):
                                                                                                word_bboxes[i],
                                                                                                words[i],
                                                                                                viz=self.viz)
+                if pursedo_bboxes is None:
+                    continue
                 confidences.append(confidence)
                 cv2.fillPoly(confidence_mask, [np.int32(word_bboxes[i])], (confidence))
                 new_words.append(words[i])
