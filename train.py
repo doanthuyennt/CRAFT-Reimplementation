@@ -68,8 +68,10 @@ parser.add_argument('--num_workers', default=32, type=int,
 parser.add_argument('--text_threshold', default=0.7, type=float, help='text confidence threshold')
 parser.add_argument('--low_text', default=0.4, type=float, help='text low-bound score')
 parser.add_argument('--link_threshold', default=0.4, type=float, help='link confidence threshold')
-parser.add_argument('--canvas_size', default=2240, type=int, help='image size for inference')
+parser.add_argument('--canvas_size', default=1280, type=int, help='image size for inference')
 parser.add_argument('--poly', default=False, action='store_true', help='enable polygon type')
+parser.add_argument('--mag_ratio', default=2., type=float, help='image magnification ratio')
+parser.add_argument('--show_time', default=False, action='store_true', help='show processing time')
 
 ##### Data #####
 parser.add_argument('--synth_data', default="Synthtext", type=str,
@@ -114,7 +116,8 @@ def step(
     index,
     len_data_loader,
     out_folder,
-    st
+    st,
+    loss_value
     ):
     
     images = torch.cat((syn_images,real_images), 0)
@@ -140,12 +143,12 @@ def step(
 
     loss.backward()
     optimizer.step()
-    # loss_value += loss.item()
+    loss_value[0] += loss.item()
     if index % 2 == 0 and index > 0:
         et = time.time()
-        print('epoch {}:({}/{}) batch || training time for 2 batch {}'.format(epoch, index, len_data_loader, et-st[0]))
+        print('epoch {}:({}/{}) batch || training time for 2 batch {} || training loss {} ||'.format(epoch, index, len_data_loader, et-st[0], loss_value[0]/2))
         loss_time = 0
-        # loss_value = 0
+        loss_value[0] = 0
         st[0] = time.time()
     # if loss < compare_loss:
     #     print('save the lower loss iter, loss:',loss)
@@ -205,7 +208,7 @@ if __name__ == '__main__':
     loss_value = 0
     compare_loss = 1
     for epoch in range(10):
-        loss_value = 0
+        loss_value = [0]
         # if epoch % 50 == 0 and epoch != 0:
         #     step_index += 1
         #     adjust_learning_rate(optimizer, args.gamma, step_index)
@@ -220,7 +223,8 @@ if __name__ == '__main__':
                 index,
                 len(real_data_loader),
                 args.out_folder,
-                st
+                st,
+                loss_value
             )
             if index % 1000 == 0:
                 net.eval()
