@@ -793,14 +793,25 @@ class VietSB(craft_base_dataset):
         words = []
         for line in lines:
             m = re.match(POINT_TRANS_8,line)
-            box = [m.group(i) for i in range(1,9)]
+            try:
+                box = [m.group(i) for i in range(1,9)]
+            except:
+                print(os.path.realpath(gt_path))
+                continue
             box = np.array(box, np.int32).reshape(4, 2)
             word = m.group(9)
+            try:
+                area, p0, p3, p2, p1, _, _ = mep(box)
+            except:
+                print(os.path.realpath(gt_path))
+                continue
+            if word == '':
+                print(os.path.realpath(gt_path))
+                continue
             if word == '###':
                 words.append('###')
                 bboxes.append(box)
                 continue
-            area, p0, p3, p2, p1, _, _ = mep(box)
 
             bbox = np.array([p0, p1, p2, p3])
             distance = 10000000
@@ -872,7 +883,10 @@ if __name__ == '__main__':
     net = torch.nn.DataParallel(net)
     net.eval()
 
-    dataloader = VietSB(net,args.real_path,target_size=768, viz=True, debug=True)
+    if args.synth_data == 'VietST':
+        dataloader = VietSynth(args.synth_path,target_size=768, viz=True, debug=True)
+    elif args.synth_data == 'Synthtext':
+        dataloader = Synth80k(args.synth_path,target_size=768, viz=True, debug=True)
     train_loader = torch.utils.data.DataLoader(
         dataloader,
         batch_size=1,

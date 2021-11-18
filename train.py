@@ -100,11 +100,13 @@ def adjust_learning_rate(optimizer, gamma, step):
         param_group['lr'] = lr
 
 def step(
+    net,
     syn_images, syn_gh_label, syn_gah_label, syn_mask,
     real_images, real_gh_label, real_gah_label, real_mask,
     index,
     len_data_loader,
-    out_folder
+    out_folder,
+    st
     ):
     
     images = torch.cat((syn_images,real_images), 0)
@@ -130,29 +132,18 @@ def step(
 
     loss.backward()
     optimizer.step()
-    loss_value += loss.item()
+    # loss_value += loss.item()
     if index % 2 == 0 and index > 0:
         et = time.time()
-        print('epoch {}:({}/{}) batch || training time for 2 batch {} || training loss {} ||'.format(epoch, index, len_data_loader, et-st, loss_value/2))
+        print('epoch {}:({}/{}) batch || training time for 2 batch {}'.format(epoch, index, len_data_loader, et-st[0]))
         loss_time = 0
-        loss_value = 0
-        st = time.time()
+        # loss_value = 0
+        st[0] = time.time()
     # if loss < compare_loss:
     #     print('save the lower loss iter, loss:',loss)
     #     compare_loss = loss
     #     torch.save(net.module.state_dict(),
     #                '/data/CRAFT-pytorch/real_weights/lower_loss.pth'
-    out_path = os.path.join(out_folder,
-        'synweights_epoch_{}_iter_{}_.pth'.format(epoch,repr(index))
-        )
-    if index % 1000 == 0 and index != 0:
-        print('Saving state, index:', index)
-        torch.save(net.module.state_dict(),
-                    out_path)
-        test(out_path)
-        #test('/data/CRAFT-pytorch/craft_mlt_25k.pth')
-        if index != 0:
-            getresult()
 
 if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
@@ -211,16 +202,31 @@ if __name__ == '__main__':
         #     step_index += 1
         #     adjust_learning_rate(optimizer, args.gamma, step_index)
 
-        st = time.time()
+        st = [time.time()]
         for index, (real_images, real_gh_label, real_gah_label, real_mask, _) in enumerate(real_data_loader):
             syn_images, syn_gh_label, syn_gah_label, syn_mask, __ = next(batch_syn)
             step(
+                net,
                 syn_images, syn_gh_label, syn_gah_label, syn_mask,
                 real_images, real_gh_label, real_gah_label, real_mask,
                 index,
                 len(real_data_loader),
-                args.out_folder
+                args.out_folder,
+                st
             )
+            if index % 1000 == 0:
+                net.eval()
+                print('Saving state, index:', index)
+                out_path = os.path.join(args.out_folder,
+                    'synweights_epoch_{}_iter_{}_.pth'.format(epoch,repr(index))
+                    )
+                torch.save(net.module.state_dict(),
+                            out_path)
+                test(out_path)
+                #test('/data/CRAFT-pytorch/craft_mlt_25k.pth')
+                if index != 0:
+                    getresult()
+                net.train()
         final_iter_path = os.path.join(
             out_folder,
             'synweights_epoch_{}_iter_final_.pth'.format(epoch)

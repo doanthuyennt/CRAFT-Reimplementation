@@ -35,7 +35,8 @@ from torchvision.transforms import transforms
 from craft import CRAFT
 from torch.autograd import Variable
 from multiprocessing import Pool
-
+def str2bool(v):
+    return v.lower() in ("yes", "true", "t", "1")
 #3.2768e-5
 random.seed(42)
 
@@ -100,47 +101,40 @@ if __name__ == '__main__':
     # imgname = box['imnames'][0]
     # imgtxt = box['txt'][0]
 
+
     #dataloader = syndata(imgname, charbox, imgtxt)
-    dataloader = Synth80k('/data/CRAFT-pytorch/syntext/SynthText/SynthText', target_size = 768)
+    if args.synth_data == 'VietST':
+        dataloader = VietSynth(args.synth_path,target_size=768, viz=False, debug=True)
+    elif args.synth_data == 'Synthtext':
+        dataloader = Synth80k(args.synth_path,target_size=768, viz=False, debug=True)
     train_loader = torch.utils.data.DataLoader(
         dataloader,
-        batch_size=16,
+        batch_size=8,
         shuffle=True,
-        num_workers=0,
+        num_workers=4,
         drop_last=True,
         pin_memory=True)
-    #batch_syn = iter(train_loader)
-    # prefetcher = data_prefetcher(dataloader)
-    # input, target1, target2 = prefetcher.next()
-    #print(input.size())
+
     net = CRAFT()
-    #net.load_state_dict(copyStateDict(torch.load('/data/CRAFT-pytorch/CRAFT_net_050000.pth')))
-    #net.load_state_dict(copyStateDict(torch.load('/data/CRAFT-pytorch/1-7.pth')))
-    #net.load_state_dict(copyStateDict(torch.load('/data/CRAFT-pytorch/craft_mlt_25k.pth')))
-    #net.load_state_dict(copyStateDict(torch.load('vgg16_bn-6c64b313.pth')))
-    #realdata = realdata(net)
-    # realdata = ICDAR2015(net, '/data/CRAFT-pytorch/icdar2015', target_size = 768)
-    # real_data_loader = torch.utils.data.DataLoader(
-    #     realdata,
-    #     batch_size=10,
-    #     shuffle=True,
-    #     num_workers=0,
-    #     drop_last=True,
-    #     pin_memory=True)
+    if args.real_data == 'VietSB':
+        realdata = VietSB(net, args.real_path, target_size=768)
+    elif args.real_data == 'ICDAR2015':
+        realdata = ICDAR2015(net, args.real_path, target_size=768)
+    elif args.real_data == 'ICDAR2013':
+        realdata = ICDAR2013(net, args.real_path, target_size=768)
     net = net.cuda()
     #net = CRAFT_net
 
     # if args.cdua:
-    net = torch.nn.DataParallel(net,device_ids=[0,1,2,3]).cuda()
+    net = torch.nn.DataParallel(net).cuda()
     cudnn.benchmark = True
-    # realdata = ICDAR2015(net, '/data/CRAFT-pytorch/icdar2015', target_size=768)
-    # real_data_loader = torch.utils.data.DataLoader(
-    #     realdata,
-    #     batch_size=10,
-    #     shuffle=True,
-    #     num_workers=0,
-    #     drop_last=True,
-    #     pin_memory=True)
+    real_data_loader = torch.utils.data.DataLoader(
+        realdata,
+        batch_size=10,
+        shuffle=True,
+        num_workers=0,
+        drop_last=True,
+        pin_memory=True)
 
 
     optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -150,12 +144,12 @@ if __name__ == '__main__':
 
 
     step_index = 0
-
+    os.makedirs('./data/CRAFT-pytorch/synweights/',exist_ok = True)
 
     loss_time = 0
     loss_value = 0
     compare_loss = 1
-    for epoch in range(1000):
+    for epoch in range(10):
         loss_value = 0
         # if epoch % 50 == 0 and epoch != 0:
         #     step_index += 1
@@ -163,7 +157,7 @@ if __name__ == '__main__':
 
         st = time.time()
         for index, (images, gh_label, gah_label, mask, _) in enumerate(train_loader):
-            if index % 20000 == 0 and index != 0:
+            if index % 1000 == 0 and index != 0:
                 step_index += 1
                 adjust_learning_rate(optimizer, args.gamma, step_index)
             #real_images, real_gh_label, real_gah_label, real_mask = next(batch_real)
@@ -210,13 +204,15 @@ if __name__ == '__main__':
             #     torch.save(net.module.state_dict(),
             #                '/data/CRAFT-pytorch/real_weights/lower_loss.pth'
 
-            if index % 5000 == 0 and index != 0:
+            if index % 1000 == 0 and index != 0:
                 print('Saving state, index:', index)
                 torch.save(net.module.state_dict(),
-                           '/data/CRAFT-pytorch/synweights/synweights_' + repr(index) + '.pth')
-                test('/data/CRAFT-pytorch/synweights/synweights_' + repr(index) + '.pth')
+                           './data/CRAFT-pytorch/synweights/synweights_epoch_{}_iter_{}_.pth'.format(epoch,repr(index)))
+                test('./data/CRAFT-pytorch/synweights/synweights_epoch_{}_iter_{}_.pth'.format(epoch,repr(index)))
                 #test('/data/CRAFT-pytorch/craft_mlt_25k.pth')
                 getresult()
+        torch.save(net.module.state_dict(),
+            './data/CRAFT-pytorch/synweights/synweights_epoch_{}_iter_final_.pth'.format(epoch))
 
 
 
