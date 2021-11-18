@@ -240,7 +240,7 @@ if __name__ == '__main__':
                     getresult()
                 net.train()
         final_iter_path = os.path.join(
-            out_folder,
+            args.out_folder,
             'synweights_epoch_{}_iter_final_.pth'.format(epoch)
         )
         torch.save(net.module.state_dict(),
