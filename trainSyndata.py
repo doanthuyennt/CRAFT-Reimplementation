@@ -197,7 +197,7 @@ if __name__ == '__main__':
     loss_value = 0
     compare_loss = 1
     for epoch in range(10):
-        loss_value = 0
+        loss_value = [0]
         # if epoch % 50 == 0 and epoch != 0:
         #     step_index += 1
         #     adjust_learning_rate(optimizer, args.gamma, step_index)
@@ -211,7 +211,7 @@ if __name__ == '__main__':
                 net,
                 images, gh_label, gah_label, mask,
                 index,
-                len(real_data_loader),
+                len(train_loader),
                 args.out_folder,
                 st,
                 loss_value
@@ -230,7 +230,7 @@ if __name__ == '__main__':
                     getresult()
                 net.train()
         final_iter_path = os.path.join(
-            out_folder,
+            args.out_folder,
             'synweights_epoch_{}_iter_final_.pth'.format(epoch)
         )
         torch.save(net.module.state_dict(),

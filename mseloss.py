@@ -9,33 +9,28 @@ class Maploss(nn.Module):
         super(Maploss,self).__init__()
 
     def single_image_loss(self, pre_loss, loss_label):
-        batch_size = pre_loss.shape[0]
-        sum_loss = torch.mean(pre_loss.view(-1))*0
-        pre_loss = pre_loss.view(batch_size, -1)
-        loss_label = loss_label.view(batch_size, -1)
-        internel = batch_size
-        for i in range(batch_size):
-            average_number = 0
-            loss = torch.mean(pre_loss.view(-1)) * 0
-            positive_pixel = len(pre_loss[i][(loss_label[i] >= 0.1)])
-            average_number += positive_pixel
-            if positive_pixel != 0:
-                posi_loss = torch.mean(pre_loss[i][(loss_label[i] >= 0.1)])
-                sum_loss += posi_loss
-                if len(pre_loss[i][(loss_label[i] < 0.1)]) < 3*positive_pixel:
-                    nega_loss = torch.mean(pre_loss[i][(loss_label[i] < 0.1)])
-                    average_number += len(pre_loss[i][(loss_label[i] < 0.1)])
-                else:
-                    nega_loss = torch.mean(torch.topk(pre_loss[i][(loss_label[i] < 0.1)], 3*positive_pixel)[0])
-                    average_number += 3*positive_pixel
-                sum_loss += nega_loss
-            else:
-                nega_loss = torch.mean(torch.topk(pre_loss[i], 500)[0])
-                average_number += 500
-                sum_loss += nega_loss
-            #sum_loss += loss/average_number
+        # batch_size = pre_loss.shape[0]
+        # sum_loss = torch.mean(pre_loss.view(-1))*0
+        # pre_loss = pre_loss.view(batch_size, -1)
+        # loss_label = loss_label.view(batch_size, -1)
+        # internel = batch_size
+        positive_pixel = (loss_label > 0.1).float()
+        positive_pixel_number = torch.sum(positive_pixel)
+        positive_loss_region = pre_loss * positive_pixel
+        positive_loss = torch.sum(positive_loss_region) / positive_pixel_number
 
-        return sum_loss
+        negative_pixel = (loss_label <= 0.1).float()
+        negative_pixel_number = torch.sum(negative_pixel)
+
+        if negative_pixel_number < 3*positive_pixel_number:
+            negative_loss_region = pre_loss * negative_pixel
+            negative_loss = torch.sum(negative_loss_region) / negative_pixel_number
+        else:
+            negative_loss_region = pre_loss * negative_pixel
+            negative_loss = torch.sum(torch.topk(negative_loss_region.view(-1), int(3*positive_pixel_number))[0]) / (positive_pixel_number*3)
+
+        total_loss = positive_loss + negative_loss
+        return total_loss
 
 
 

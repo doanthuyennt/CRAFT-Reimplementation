@@ -52,7 +52,7 @@ parser.add_argument('--batch_size', default=128, type = int,
                     help='batch size of training')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use CUDA to train model')
-parser.add_argument('--lr', '--learning-rate', default=3.2768e-5, type=float,
+parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float,
                     help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float,
                     help='Momentum value for optim')
@@ -146,7 +146,7 @@ def step(
     loss_value[0] += loss.item()
     if index % 2 == 0 and index > 0:
         et = time.time()
-        print('epoch {}:({}/{}) batch || training time for 2 batch {} || training loss {} ||'.format(epoch, index, len_data_loader, et-st[0], loss_value[0]/2))
+        print('epoch {}:({}/{}) batch || training time for 2 batch {} || training loss {} ||'.format(epoch, index, len_data_loader, round(et-st[0],4), round(loss_value[0]/2,4)))
         loss_time = 0
         loss_value[0] = 0
         st[0] = time.time()
