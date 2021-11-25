@@ -104,7 +104,7 @@ def adjust_learning_rate(optimizer, gamma, step):
     # Adapted from PyTorch Imagenet example:
     # https://github.com/pytorch/examples/blob/master/imagenet/main.py
     """
-    lr = args.lr * (0.8 ** step)
+    lr = args.lr * (gamma ** step)
     print(lr)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr

@@ -58,7 +58,7 @@ parser.add_argument('--batch_size', default=128, type = int,
                     help='batch size of training')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use CUDA to train model')
-parser.add_argument('--lr', '--learning-rate', default=3.2768e-5, type=float,
+parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float,
                     help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float,
                     help='Momentum value for optim')
@@ -113,7 +113,7 @@ def adjust_learning_rate(optimizer, gamma, step):
     # Adapted from PyTorch Imagenet example:
     # https://github.com/pytorch/examples/blob/master/imagenet/main.py
     """
-    lr = args.lr * (0.8 ** step)
+    lr = args.lr * (gamma ** step)
     print(lr)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
@@ -177,6 +177,8 @@ if __name__ == '__main__':
         pin_memory=True)
 
     net = CRAFT()
+    if isinstance(args.resume,str) and args.resume.endswith('.pth'):
+        net.load_state_dict(copyStateDict(torch.load(args.resume)))
     net = net.cuda()
     #net = CRAFT_net
 
